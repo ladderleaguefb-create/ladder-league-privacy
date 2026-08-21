@@ -226,7 +226,7 @@
       <div class="roster-wrap">
         <table class="roster">
           <thead>
-            <tr><th>Name</th><th>Email</th><th>Level</th><th>Joined</th><th>Referred</th></tr>
+            <tr><th>Name</th><th>Nickname</th><th>Email</th><th>Level</th><th>Joined</th><th>Referred</th></tr>
           </thead>
           <tbody id="rosterBody"></tbody>
         </table>
@@ -384,6 +384,7 @@ document.getElementById("rosterUnlockBtn").addEventListener("click", async () =>
       const tr = document.createElement("tr");
       tr.innerHTML =
         "<td>" + name + "</td>" +
+        "<td>" + (u.nickname || "—") + "</td>" +
         "<td>" + u.email + "</td>" +
         "<td>" + u.current_level + "</td>" +
         "<td>" + fmtDate(u.created_at) + "</td>" +
