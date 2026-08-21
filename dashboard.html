@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ladder League — Scoreboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --field-green: #1F4D2C;
+    --field-green-dark: #143420;
+    --chalk: #F7F4EA;
+    --pigskin: #A2551C;
+    --lace: #EFE6D0;
+    --ink: #16241A;
+    --slate: #5B6B5E;
+    --line: rgba(22,36,26,0.08);
+    --gold: #C9A24B;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+    background: var(--chalk);
+    color: var(--ink);
+    margin: 0;
+    min-height: 100vh;
+  }
+  .hero {
+    background: linear-gradient(160deg, var(--field-green) 0%, var(--field-green-dark) 100%);
+    color: var(--chalk);
+    padding: 32px 28px 24px;
+  }
+  .hero-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    max-width: 980px;
+    margin: 0 auto;
+  }
+  .hero-eyebrow {
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--gold);
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  .hero h1 {
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 30px;
+    font-weight: 700;
+    margin: 0;
+  }
+  #refreshBtn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.18);
+    color: var(--chalk);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 8px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  #refreshBtn:hover { background: rgba(255,255,255,0.18); }
+  .tabs {
+    display: flex;
+    gap: 4px;
+    margin-top: 22px;
+    max-width: 980px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .tab-btn {
+    background: transparent;
+    border: none;
+    color: rgba(247,244,234,0.6);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 9px 16px;
+    border-radius: 7px 7px 0 0;
+    cursor: pointer;
+  }
+  .tab-btn.active { color: var(--field-green-dark); background: var(--chalk); }
+  .content { padding: 24px 28px 40px; max-width: 980px; margin: 0 auto; }
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin-bottom: 22px;
+  }
+  .stat-card {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px 16px 14px;
+  }
+  .stat-value { font-family: Georgia, serif; font-size: 26px; font-weight: 700; }
+  .stat-label { font-size: 12px; color: var(--slate); margin-top: 5px; font-weight: 500; }
+  .stat-sub { font-size: 11px; color: var(--pigskin); margin-top: 3px; font-weight: 600; }
+  .panel {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 20px 20px 8px;
+    margin-bottom: 18px;
+  }
+  .panel-title { font-size: 13px; font-weight: 700; margin-bottom: 2px; }
+  .panel-sub { font-size: 12px; color: var(--slate); margin-bottom: 14px; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 640px) { .two-col { grid-template-columns: 1fr; } }
+  canvas { max-height: 220px; }
+  .hidden { display: none; }
+  .loading-wrap, .error-wrap {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 60px 20px; color: var(--slate); gap: 10px;
+  }
+  .error-wrap { color: var(--pigskin); }
+  .gate { max-width: 360px; margin: 40px auto; text-align: center; }
+  .gate h3 { font-family: Georgia, serif; font-size: 18px; margin: 0 0 4px; }
+  .gate p { font-size: 13px; color: var(--slate); margin: 0 0 18px; }
+  .gate input {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--line);
+    border-radius: 8px; font-size: 14px; margin-bottom: 10px; background: var(--chalk);
+  }
+  .gate button {
+    width: 100%; padding: 10px 12px; border: none; border-radius: 8px;
+    background: var(--field-green); color: var(--chalk); font-weight: 600;
+    font-size: 14px; cursor: pointer;
+  }
+  .gate-error { color: #A23E3E; font-size: 12px; margin-top: 8px; }
+  table.roster { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.roster th {
+    text-align: left; font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.04em; color: var(--slate); padding: 8px 10px; border-bottom: 1px solid var(--line);
+  }
+  table.roster td { padding: 9px 10px; border-bottom: 1px solid var(--line); }
+  .roster-wrap { overflow-x: auto; max-height: 480px; overflow-y: auto; }
+  .badge { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 100px; background: var(--lace); color: var(--pigskin); }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="hero-top">
+    <div>
+      <div class="hero-eyebrow">Weekly Huddle · Metrics</div>
+      <h1>Scoreboard</h1>
+    </div>
+    <button id="refreshBtn">Refresh</button>
+  </div>
+  <div class="tabs">
+    <button class="tab-btn active" id="tabOverviewBtn">Overview</button>
+    <button class="tab-btn" id="tabRosterBtn">User Roster</button>
+  </div>
+</div>
+
+<div class="content">
+  <div id="overviewTab">
+    <div id="loadingWrap" class="loading-wrap"><span>Pulling the latest numbers…</span></div>
+    <div id="errorWrap" class="error-wrap hidden"></div>
+    <div id="overviewBody" class="hidden">
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-value" id="statTotalUsers">—</div>
+          <div class="stat-label">Total signups</div>
+          <div class="stat-sub" id="statNew7d"></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="statHuddles">—</div>
+          <div class="stat-label">Huddles created</div>
+          <div class="stat-sub" id="statAvgMembers"></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="statInviteRate">—</div>
+          <div class="stat-label">Invites accepted</div>
+          <div class="stat-sub" id="statInviteCount"></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="statPoolEntrants">—</div>
+          <div class="stat-label">Pool entrants</div>
+          <div class="stat-sub" id="statPoolPicks"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Signups over time</div>
+        <div class="panel-sub">Cumulative total users, day by day</div>
+        <canvas id="signupsChart"></canvas>
+      </div>
+
+      <div class="two-col">
+        <div class="panel">
+          <div class="panel-title">Huddles formed</div>
+          <div class="panel-sub">Cumulative huddles created</div>
+          <canvas id="huddlesChart"></canvas>
+        </div>
+        <div class="panel">
+          <div class="panel-title">Weekly active pickers</div>
+          <div class="panel-sub">Distinct users submitting picks/week</div>
+          <canvas id="activeChart"></canvas>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Where users are in the game</div>
+        <div class="panel-sub">Current level distribution across active users</div>
+        <canvas id="levelChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div id="rosterTab" class="hidden">
+    <div id="rosterGate" class="gate">
+      <h3>Roster is locked</h3>
+      <p>Enter the shared access code to view names and emails.</p>
+      <input type="password" id="rosterCodeInput" placeholder="Access code" />
+      <button id="rosterUnlockBtn">Unlock roster</button>
+      <div class="gate-error hidden" id="rosterError"></div>
+    </div>
+    <div id="rosterPanel" class="panel hidden">
+      <div class="panel-title">User roster</div>
+      <div class="panel-sub" id="rosterCount"></div>
+      <div class="roster-wrap">
+        <table class="roster">
+          <thead>
+            <tr><th>Name</th><th>Email</th><th>Level</th><th>Joined</th><th>Referred</th></tr>
+          </thead>
+          <tbody id="rosterBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = "https://yjmwbpyhghkqhcfiwtek.supabase.co";
+const SUPABASE_KEY = "sb_publishable_VRylNsSlUoigS4Tv8P0ZVQ_HVmKIbye";
+const headers = {
+  apikey: SUPABASE_KEY,
+  Authorization: "Bearer " + SUPABASE_KEY,
+  "Content-Type": "application/json",
+};
+
+async function fetchView(view, query) {
+  const res = await fetch(SUPABASE_URL + "/rest/v1/" + view + "?select=*" + (query || ""), { headers });
+  if (!res.ok) throw new Error(view + ": " + res.status);
+  return res.json();
+}
+
+async function callRoster(code) {
+  const res = await fetch(SUPABASE_URL + "/rest/v1/rpc/get_user_roster", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ access_code: code }),
+  });
+  if (!res.ok) throw new Error("bad code");
+  return res.json();
+}
+
+function fmtDate(d) {
+  return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+let charts = {};
+function renderLineChart(id, labels, data, color) {
+  if (charts[id]) charts[id].destroy();
+  const ctx = document.getElementById(id).getContext("2d");
+  charts[id] = new Chart(ctx, {
+    type: "line",
+    data: { labels, datasets: [{ data, borderColor: color, borderWidth: 2.5, pointRadius: 0, tension: 0.3 }] },
+    options: {
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 11 }, color: "#5B6B5E" } },
+        y: { grid: { color: "rgba(22,36,26,0.08)" }, ticks: { font: { size: 11 }, color: "#5B6B5E", precision: 0 } },
+      },
+    },
+  });
+}
+
+function renderBarChart(id, labels, data, color) {
+  if (charts[id]) charts[id].destroy();
+  const ctx = document.getElementById(id).getContext("2d");
+  charts[id] = new Chart(ctx, {
+    type: "bar",
+    data: { labels, datasets: [{ data, backgroundColor: color, borderRadius: 4 }] },
+    options: {
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 10 }, color: "#5B6B5E" } },
+        y: { grid: { color: "rgba(22,36,26,0.08)" }, ticks: { font: { size: 10 }, color: "#5B6B5E", precision: 0 } },
+      },
+    },
+  });
+}
+
+async function loadAll() {
+  document.getElementById("loadingWrap").classList.remove("hidden");
+  document.getElementById("errorWrap").classList.add("hidden");
+  document.getElementById("overviewBody").classList.add("hidden");
+  try {
+    const [signupsDaily, signupsSummary, huddlesDaily, huddlesSummary, invites, activePickers, poolSummary, levels] =
+      await Promise.all([
+        fetchView("dash_signups_daily", "&order=signup_date.asc"),
+        fetchView("dash_signups_summary"),
+        fetchView("dash_huddles_daily", "&order=created_date.asc"),
+        fetchView("dash_huddles_summary"),
+        fetchView("dash_invites_summary"),
+        fetchView("dash_weekly_active_pickers", "&order=week_of.asc"),
+        fetchView("dash_pool_entries_summary"),
+        fetchView("dash_level_distribution", "&order=current_level.asc"),
+      ]);
+
+    const su = signupsSummary[0] || {};
+    const hu = huddlesSummary[0] || {};
+    const inv = invites[0] || {};
+    const pool = poolSummary[0] || {};
+
+    document.getElementById("statTotalUsers").textContent = su.total_users ?? "—";
+    document.getElementById("statNew7d").textContent = "+" + (su.new_last_7_days ?? 0) + " last 7 days";
+    document.getElementById("statHuddles").textContent = hu.total_huddles ?? "—";
+    document.getElementById("statAvgMembers").textContent = "avg " + (hu.avg_members_per_huddle ?? "—") + " members";
+    document.getElementById("statInviteRate").textContent = (inv.acceptance_rate_pct ?? 0) + "%";
+    document.getElementById("statInviteCount").textContent = (inv.invites_accepted ?? 0) + " of " + (inv.total_invites_sent ?? 0);
+    document.getElementById("statPoolEntrants").textContent = pool.unique_pool_entrants ?? "—";
+    document.getElementById("statPoolPicks").textContent = (pool.total_pool_picks ?? 0) + " picks made";
+
+    let total = 0;
+    const signupLabels = [], signupTotals = [];
+    signupsDaily.forEach((d) => { total += d.signups; signupLabels.push(fmtDate(d.signup_date)); signupTotals.push(total); });
+    renderLineChart("signupsChart", signupLabels, signupTotals, "#1F4D2C");
+
+    let htotal = 0;
+    const huddleLabels = [], huddleTotals = [];
+    huddlesDaily.forEach((d) => { htotal += d.huddles_created; huddleLabels.push(fmtDate(d.created_date)); huddleTotals.push(htotal); });
+    renderLineChart("huddlesChart", huddleLabels, huddleTotals, "#A2551C");
+
+    renderBarChart("activeChart", activePickers.map((d) => fmtDate(d.week_of)), activePickers.map((d) => d.active_pickers), "#C9A24B");
+    renderBarChart("levelChart", levels.map((l) => "Lv " + l.current_level), levels.map((l) => l.user_count), "#1F4D2C");
+
+    document.getElementById("loadingWrap").classList.add("hidden");
+    document.getElementById("overviewBody").classList.remove("hidden");
+  } catch (e) {
+    document.getElementById("loadingWrap").classList.add("hidden");
+    const ew = document.getElementById("errorWrap");
+    ew.textContent = "Couldn't load data: " + e.message;
+    ew.classList.remove("hidden");
+  }
+}
+
+document.getElementById("refreshBtn").addEventListener("click", loadAll);
+
+document.getElementById("tabOverviewBtn").addEventListener("click", () => {
+  document.getElementById("tabOverviewBtn").classList.add("active");
+  document.getElementById("tabRosterBtn").classList.remove("active");
+  document.getElementById("overviewTab").classList.remove("hidden");
+  document.getElementById("rosterTab").classList.add("hidden");
+});
+
+document.getElementById("tabRosterBtn").addEventListener("click", () => {
+  document.getElementById("tabRosterBtn").classList.add("active");
+  document.getElementById("tabOverviewBtn").classList.remove("active");
+  document.getElementById("rosterTab").classList.remove("hidden");
+  document.getElementById("overviewTab").classList.add("hidden");
+});
+
+document.getElementById("rosterUnlockBtn").addEventListener("click", async () => {
+  const code = document.getElementById("rosterCodeInput").value;
+  const errEl = document.getElementById("rosterError");
+  errEl.classList.add("hidden");
+  if (!code) return;
+  try {
+    const rows = await callRoster(code);
+    document.getElementById("rosterGate").classList.add("hidden");
+    document.getElementById("rosterPanel").classList.remove("hidden");
+    document.getElementById("rosterCount").textContent = rows.length + " users, most recent first";
+    const body = document.getElementById("rosterBody");
+    body.innerHTML = "";
+    rows.forEach((u) => {
+      const name = (u.first_name || u.last_name) ? ((u.first_name || "") + " " + (u.last_name || "")).trim() : (u.nickname || "—");
+      const tr = document.createElement("tr");
+      tr.innerHTML =
+        "<td>" + name + "</td>" +
+        "<td>" + u.email + "</td>" +
+        "<td>" + u.current_level + "</td>" +
+        "<td>" + fmtDate(u.created_at) + "</td>" +
+        "<td>" + (u.referrer_id ? '<span class="badge">Yes</span>' : "—") + "</td>";
+      body.appendChild(tr);
+    });
+  } catch (e) {
+    errEl.textContent = "Wrong code, or the request failed. Try again.";
+    errEl.classList.remove("hidden");
+  }
+});
+
+document.getElementById("rosterCodeInput").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") document.getElementById("rosterUnlockBtn").click();
+});
+
+loadAll();
+</script>
+
+</body>
+</html>
