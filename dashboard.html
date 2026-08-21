@@ -158,6 +158,80 @@
   table.roster td { padding: 9px 10px; border-bottom: 1px solid var(--line); }
   .roster-wrap { overflow-x: auto; max-height: 480px; overflow-y: auto; }
   .badge { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 100px; background: rgba(201,162,75,0.14); color: var(--gold); }
+
+  .week-select-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+  }
+  .week-select-row label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--slate);
+  }
+  #weekSelect {
+    padding: 8px 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-size: 13px;
+    background: #fff;
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .grading-note {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--gold);
+    background: rgba(201,162,75,0.12);
+    padding: 4px 10px;
+    border-radius: 100px;
+  }
+  table.breakdown {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin-top: 4px;
+  }
+  table.breakdown th {
+    text-align: left;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--slate);
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--line);
+  }
+  table.breakdown td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--line);
+  }
+  table.breakdown tr.correct-row { background: rgba(27,59,36,0.05); }
+  .level-block { margin-bottom: 22px; }
+  .level-block:last-child { margin-bottom: 0; }
+  .level-block-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--ink);
+    margin-bottom: 6px;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .level-block-title .level-pct {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--slate);
+  }
+  .empty-note {
+    font-size: 12px;
+    color: var(--slate);
+    padding: 10px 0;
+  }
 </style>
 </head>
 <body>
@@ -173,6 +247,7 @@
   <h1>Scoreboard</h1>
   <div class="tabs">
     <button class="tab-btn active" id="tabOverviewBtn">Overview</button>
+    <button class="tab-btn" id="tabWeeklyBtn">Weekly Stats</button>
     <button class="tab-btn" id="tabRosterBtn">User Roster</button>
   </div>
 </div>
@@ -232,6 +307,70 @@
     </div>
   </div>
 
+  <div id="weeklyTab" class="hidden">
+    <div class="week-select-row">
+      <label for="weekSelect">Week</label>
+      <select id="weekSelect"></select>
+      <span id="gradingNote" class="grading-note hidden">Grading not yet complete for this week</span>
+    </div>
+
+    <div id="weeklyLoadingWrap" class="loading-wrap hidden"><span>Loading week data…</span></div>
+    <div id="weeklyErrorWrap" class="error-wrap hidden"></div>
+    <div id="weeklyEmptyWrap" class="empty-note hidden">No weeks found yet.</div>
+
+    <div id="weeklyBody" class="hidden">
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-value" id="statWeekTotalPct">—</div>
+          <div class="stat-label">Overall % correct</div>
+          <div class="stat-sub" id="statWeekTotalCount"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">% correct by level</div>
+        <div class="panel-sub">How each level performed this week</div>
+        <table class="breakdown" id="pctByLevelTable">
+          <thead><tr><th>Level</th><th>Picks</th><th>Correct</th><th>% Correct</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Participation by level</div>
+        <div class="panel-sub">How many players reached each level</div>
+        <table class="breakdown" id="picksByLevelTable">
+          <thead><tr><th>Level</th><th>Players</th><th>% of week's players</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Answer breakdown by level</div>
+        <div class="panel-sub">What people picked, and whether it was right</div>
+        <div id="answerBreakdownWrap"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Anomalies</div>
+        <div class="panel-sub">Least-picked answers that turned out correct</div>
+        <table class="breakdown" id="anomaliesTable">
+          <thead><tr><th>Level</th><th>Answer</th><th>Picks</th><th>% of level</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Bonus question breakdown</div>
+        <div class="panel-sub">How people answered the bonus, and outcome</div>
+        <table class="breakdown" id="bonusBreakdownTable">
+          <thead><tr><th>Answer</th><th>Picks</th><th>% of total</th><th>Correct?</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <div id="rosterTab" class="hidden">
     <div id="rosterGate" class="gate">
       <h3>Roster is locked</h3>
@@ -277,6 +416,16 @@ async function callRoster(code) {
     body: JSON.stringify({ access_code: code }),
   });
   if (!res.ok) throw new Error("bad code");
+  return res.json();
+}
+
+async function callRpc(fnName, params) {
+  const res = await fetch(SUPABASE_URL + "/rest/v1/rpc/" + fnName, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(params || {}),
+  });
+  if (!res.ok) throw new Error(fnName + ": " + res.status);
   return res.json();
 }
 
@@ -371,21 +520,209 @@ async function loadAll() {
   }
 }
 
-document.getElementById("refreshBtn").addEventListener("click", loadAll);
+document.getElementById("refreshBtn").addEventListener("click", () => {
+  loadAll();
+  if (!document.getElementById("weeklyTab").classList.contains("hidden") && currentWeekId) {
+    loadWeekData(currentWeekId);
+  }
+});
+
+function showTab(tabId, btnId) {
+  ["overviewTab", "weeklyTab", "rosterTab"].forEach((id) => {
+    document.getElementById(id).classList.toggle("hidden", id !== tabId);
+  });
+  ["tabOverviewBtn", "tabWeeklyBtn", "tabRosterBtn"].forEach((id) => {
+    document.getElementById(id).classList.toggle("active", id === btnId);
+  });
+}
 
 document.getElementById("tabOverviewBtn").addEventListener("click", () => {
-  document.getElementById("tabOverviewBtn").classList.add("active");
-  document.getElementById("tabRosterBtn").classList.remove("active");
-  document.getElementById("overviewTab").classList.remove("hidden");
-  document.getElementById("rosterTab").classList.add("hidden");
+  showTab("overviewTab", "tabOverviewBtn");
 });
 
 document.getElementById("tabRosterBtn").addEventListener("click", () => {
-  document.getElementById("tabRosterBtn").classList.add("active");
-  document.getElementById("tabOverviewBtn").classList.remove("active");
-  document.getElementById("rosterTab").classList.remove("hidden");
-  document.getElementById("overviewTab").classList.add("hidden");
+  showTab("rosterTab", "tabRosterBtn");
 });
+
+document.getElementById("tabWeeklyBtn").addEventListener("click", () => {
+  showTab("weeklyTab", "tabWeeklyBtn");
+  if (!weeksLoaded) loadWeeks();
+});
+
+// ---------- WEEKLY STATS ----------
+let weeksLoaded = false;
+let currentWeekId = null;
+let weeksById = {};
+
+async function loadWeeks() {
+  const loadingEl = document.getElementById("weeklyLoadingWrap");
+  const errorEl = document.getElementById("weeklyErrorWrap");
+  const emptyEl = document.getElementById("weeklyEmptyWrap");
+  loadingEl.classList.remove("hidden");
+  errorEl.classList.add("hidden");
+  emptyEl.classList.add("hidden");
+  try {
+    const weeks = await fetchView("dash_available_weeks");
+    weeksLoaded = true;
+    loadingEl.classList.add("hidden");
+    if (!weeks.length) {
+      emptyEl.classList.remove("hidden");
+      return;
+    }
+    const select = document.getElementById("weekSelect");
+    select.innerHTML = "";
+    weeks.forEach((w) => {
+      weeksById[w.week_id] = w;
+      const opt = document.createElement("option");
+      opt.value = w.week_id;
+      opt.textContent = (w.season_year ? w.season_year + " " : "") + "Week " + w.week_number + (w.is_graded ? "" : " (ungraded)");
+      select.appendChild(opt);
+    });
+    currentWeekId = weeks[0].week_id;
+    select.value = currentWeekId;
+    await loadWeekData(currentWeekId);
+  } catch (e) {
+    loadingEl.classList.add("hidden");
+    errorEl.textContent = "Couldn't load weeks: " + e.message;
+    errorEl.classList.remove("hidden");
+  }
+}
+
+document.getElementById("weekSelect").addEventListener("change", (e) => {
+  currentWeekId = e.target.value;
+  loadWeekData(currentWeekId);
+});
+
+function renderRows(tableId, rows, rowBuilder) {
+  const tbody = document.querySelector("#" + tableId + " tbody");
+  tbody.innerHTML = "";
+  if (!rows || !rows.length) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 10;
+    td.className = "empty-note";
+    td.textContent = "No data for this week yet.";
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+    return;
+  }
+  rows.forEach((r) => tbody.appendChild(rowBuilder(r)));
+}
+
+async function loadWeekData(weekId) {
+  const loadingEl = document.getElementById("weeklyLoadingWrap");
+  const errorEl = document.getElementById("weeklyErrorWrap");
+  const bodyEl = document.getElementById("weeklyBody");
+  const gradingNote = document.getElementById("gradingNote");
+  loadingEl.classList.remove("hidden");
+  errorEl.classList.add("hidden");
+  bodyEl.classList.add("hidden");
+
+  const weekInfo = weeksById[weekId];
+  gradingNote.classList.toggle("hidden", !!(weekInfo && weekInfo.is_graded));
+
+  try {
+    const [totalPct, byLevel, picksByLevel, breakdown, anomalies, bonus] = await Promise.all([
+      callRpc("dash_pct_correct_total", { p_week_id: weekId }),
+      callRpc("dash_pct_correct_by_level", { p_week_id: weekId }),
+      callRpc("dash_picks_by_level", { p_week_id: weekId }),
+      callRpc("dash_level_answer_breakdown", { p_week_id: weekId }),
+      callRpc("dash_anomalies", { p_week_id: weekId }),
+      callRpc("dash_bonus_breakdown", { p_week_id: weekId }),
+    ]);
+
+    const t = totalPct[0] || {};
+    document.getElementById("statWeekTotalPct").textContent = (t.pct_correct ?? 0) + "%";
+    document.getElementById("statWeekTotalCount").textContent = (t.correct_picks ?? 0) + " of " + (t.total_picks ?? 0) + " picks";
+
+    renderRows("pctByLevelTable", byLevel, (r) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML =
+        "<td>" + (r.level_title || "Level " + r.level_number) + "</td>" +
+        "<td>" + r.total_picks + "</td>" +
+        "<td>" + r.correct_picks + "</td>" +
+        "<td>" + (r.pct_correct ?? 0) + "%</td>";
+      return tr;
+    });
+
+    renderRows("picksByLevelTable", picksByLevel, (r) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML =
+        "<td>" + (r.level_title || "Level " + r.level_number) + "</td>" +
+        "<td>" + r.picks_made + "</td>" +
+        "<td>" + (r.pct_of_total_players ?? 0) + "%</td>";
+      return tr;
+    });
+
+    renderRows("anomaliesTable", anomalies, (r) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML =
+        "<td>" + (r.level_title || "Level " + r.level_number) + "</td>" +
+        "<td>" + r.answer_label + "</td>" +
+        "<td>" + r.pick_count + "</td>" +
+        "<td>" + (r.pct_of_level ?? 0) + "%</td>";
+      return tr;
+    });
+
+    renderRows("bonusBreakdownTable", bonus, (r) => {
+      const tr = document.createElement("tr");
+      if (r.is_correct) tr.className = "correct-row";
+      tr.innerHTML =
+        "<td>" + r.answer_label + "</td>" +
+        "<td>" + r.pick_count + "</td>" +
+        "<td>" + (r.pct_of_total ?? 0) + "%</td>" +
+        "<td>" + (r.is_correct === true ? "Correct" : r.is_correct === false ? "Incorrect" : "—") + "</td>";
+      return tr;
+    });
+
+    // Answer breakdown grouped by level, as its own mini-tables
+    const wrap = document.getElementById("answerBreakdownWrap");
+    wrap.innerHTML = "";
+    if (!breakdown || !breakdown.length) {
+      wrap.innerHTML = '<div class="empty-note">No data for this week yet.</div>';
+    } else {
+      const byLevelMap = {};
+      breakdown.forEach((r) => {
+        const key = r.level_number + "|" + (r.level_title || "");
+        if (!byLevelMap[key]) byLevelMap[key] = [];
+        byLevelMap[key].push(r);
+      });
+      Object.keys(byLevelMap).forEach((key) => {
+        const rows = byLevelMap[key];
+        const [levelNum, levelTitle] = key.split("|");
+        const block = document.createElement("div");
+        block.className = "level-block";
+        const title = document.createElement("div");
+        title.className = "level-block-title";
+        title.innerHTML = (levelTitle || "Level " + levelNum) + '<span class="level-pct"></span>';
+        block.appendChild(title);
+        const table = document.createElement("table");
+        table.className = "breakdown";
+        table.innerHTML = "<thead><tr><th>Answer</th><th>Picks</th><th>% of level</th><th>Outcome</th></tr></thead><tbody></tbody>";
+        const tbody = table.querySelector("tbody");
+        rows.forEach((r) => {
+          const tr = document.createElement("tr");
+          if (r.is_correct) tr.className = "correct-row";
+          tr.innerHTML =
+            "<td>" + r.answer_label + "</td>" +
+            "<td>" + r.pick_count + "</td>" +
+            "<td>" + (r.pct_of_level ?? 0) + "%</td>" +
+            "<td>" + (r.is_correct === true ? "Correct" : r.is_correct === false ? "Incorrect" : "—") + "</td>";
+          tbody.appendChild(tr);
+        });
+        block.appendChild(table);
+        wrap.appendChild(block);
+      });
+    }
+
+    loadingEl.classList.add("hidden");
+    bodyEl.classList.remove("hidden");
+  } catch (e) {
+    loadingEl.classList.add("hidden");
+    errorEl.textContent = "Couldn't load week data: " + e.message;
+    errorEl.classList.remove("hidden");
+  }
+}
 
 document.getElementById("rosterUnlockBtn").addEventListener("click", async () => {
   const code = document.getElementById("rosterCodeInput").value;
