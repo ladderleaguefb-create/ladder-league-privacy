@@ -593,7 +593,7 @@ document.getElementById("weekSelect").addEventListener("change", (e) => {
   loadWeekData(currentWeekId);
 });
 
-function renderRows(tableId, rows, rowBuilder) {
+function renderRows(tableId, rows, rowBuilder, emptyMessage) {
   const tbody = document.querySelector("#" + tableId + " tbody");
   tbody.innerHTML = "";
   if (!rows || !rows.length) {
@@ -601,7 +601,7 @@ function renderRows(tableId, rows, rowBuilder) {
     const td = document.createElement("td");
     td.colSpan = 10;
     td.className = "empty-note";
-    td.textContent = "No data for this week yet.";
+    td.textContent = emptyMessage || "No data for this week yet.";
     tr.appendChild(td);
     tbody.appendChild(tr);
     return;
@@ -632,10 +632,13 @@ async function loadWeekData(weekId) {
     ]);
 
     const t = totalPct[0] || {};
-    document.getElementById("statWeekTotalPct").textContent = (t.pct_correct ?? 0) + "%";
-    document.getElementById("statWeekTotalCount").textContent = (t.correct_picks ?? 0) + " of " + (t.total_picks ?? 0) + " picks";
+    const graded = !!(weekInfo && weekInfo.is_graded);
+    document.getElementById("statWeekTotalPct").textContent = graded ? (t.pct_correct ?? 0) + "%" : "—";
+    document.getElementById("statWeekTotalCount").textContent = graded
+      ? (t.correct_picks ?? 0) + " of " + (t.total_picks ?? 0) + " picks"
+      : "Grading pending";
 
-    renderRows("pctByLevelTable", byLevel, (r) => {
+    renderRows("pctByLevelTable", graded ? byLevel : [], (r) => {
       const tr = document.createElement("tr");
       tr.innerHTML =
         "<td>" + (r.level_title || "Level " + r.level_number) + "</td>" +
@@ -643,7 +646,7 @@ async function loadWeekData(weekId) {
         "<td>" + r.correct_picks + "</td>" +
         "<td>" + (r.pct_correct ?? 0) + "%</td>";
       return tr;
-    });
+    }, graded ? "No data for this week yet." : "Grading not yet complete for this week.");
 
     renderRows("picksByLevelTable", picksByLevel, (r) => {
       const tr = document.createElement("tr");
@@ -654,7 +657,7 @@ async function loadWeekData(weekId) {
       return tr;
     });
 
-    renderRows("anomaliesTable", anomalies, (r) => {
+    renderRows("anomaliesTable", graded ? anomalies : [], (r) => {
       const tr = document.createElement("tr");
       tr.innerHTML =
         "<td>" + (r.level_title || "Level " + r.level_number) + "</td>" +
@@ -662,7 +665,7 @@ async function loadWeekData(weekId) {
         "<td>" + r.pick_count + "</td>" +
         "<td>" + (r.pct_of_level ?? 0) + "%</td>";
       return tr;
-    });
+    }, graded ? "No anomalies for this week yet." : "Grading not yet complete for this week.");
 
     renderRows("bonusBreakdownTable", bonus, (r) => {
       const tr = document.createElement("tr");
