@@ -248,6 +248,7 @@
   <div class="tabs">
     <button class="tab-btn active" id="tabOverviewBtn">Overview</button>
     <button class="tab-btn" id="tabWeeklyBtn">Weekly Stats</button>
+    <button class="tab-btn" id="tabPoolsBtn">Pools</button>
     <button class="tab-btn" id="tabRosterBtn">User Roster</button>
   </div>
 </div>
@@ -365,6 +366,52 @@
         <div class="panel-sub">How people answered the bonus, and outcome</div>
         <table class="breakdown" id="bonusBreakdownTable">
           <thead><tr><th>Answer</th><th>Picks</th><th>% of total</th><th>Correct?</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="poolsTab" class="hidden">
+    <div class="week-select-row">
+      <label for="poolSelect">Pool</label>
+      <select id="poolSelect"></select>
+      <span id="poolGradingNote" class="grading-note hidden">Grading not yet complete for this pool</span>
+    </div>
+
+    <div id="poolLoadingWrap" class="loading-wrap hidden"><span>Loading pool data…</span></div>
+    <div id="poolErrorWrap" class="error-wrap hidden"></div>
+    <div id="poolEmptyWrap" class="empty-note hidden">No pools found yet.</div>
+
+    <div id="poolBody" class="hidden">
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-value" id="statPoolParticipants">—</div>
+          <div class="stat-label">Total participants</div>
+          <div class="stat-sub" id="statPoolNewRepeat"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Answer breakdown by question</div>
+        <div class="panel-sub">What people picked for each question, and whether it was right</div>
+        <div id="poolAnswerBreakdownWrap"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Top 10 for this pool</div>
+        <div class="panel-sub">Highest correct-answer counts</div>
+        <table class="breakdown" id="poolTop10Table">
+          <thead><tr><th>#</th><th>Name</th><th>Correct</th><th>Total Qs</th><th>% Correct</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Cumulative Top 5</div>
+        <div class="panel-sub">Total correct answers across all pools, all-time</div>
+        <table class="breakdown" id="poolCumulativeTable">
+          <thead><tr><th>#</th><th>Name</th><th>Total Points</th><th>Pools Played</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
@@ -525,13 +572,16 @@ document.getElementById("refreshBtn").addEventListener("click", () => {
   if (!document.getElementById("weeklyTab").classList.contains("hidden") && currentWeekId) {
     loadWeekData(currentWeekId);
   }
+  if (!document.getElementById("poolsTab").classList.contains("hidden") && currentPoolId) {
+    loadPoolData(currentPoolId);
+  }
 });
 
 function showTab(tabId, btnId) {
-  ["overviewTab", "weeklyTab", "rosterTab"].forEach((id) => {
+  ["overviewTab", "weeklyTab", "poolsTab", "rosterTab"].forEach((id) => {
     document.getElementById(id).classList.toggle("hidden", id !== tabId);
   });
-  ["tabOverviewBtn", "tabWeeklyBtn", "tabRosterBtn"].forEach((id) => {
+  ["tabOverviewBtn", "tabWeeklyBtn", "tabPoolsBtn", "tabRosterBtn"].forEach((id) => {
     document.getElementById(id).classList.toggle("active", id === btnId);
   });
 }
@@ -547,6 +597,11 @@ document.getElementById("tabRosterBtn").addEventListener("click", () => {
 document.getElementById("tabWeeklyBtn").addEventListener("click", () => {
   showTab("weeklyTab", "tabWeeklyBtn");
   if (!weeksLoaded) loadWeeks();
+});
+
+document.getElementById("tabPoolsBtn").addEventListener("click", () => {
+  showTab("poolsTab", "tabPoolsBtn");
+  if (!poolsLoaded) loadPools();
 });
 
 // ---------- WEEKLY STATS ----------
@@ -760,6 +815,145 @@ document.getElementById("rosterUnlockBtn").addEventListener("click", async () =>
 document.getElementById("rosterCodeInput").addEventListener("keydown", (e) => {
   if (e.key === "Enter") document.getElementById("rosterUnlockBtn").click();
 });
+
+// ---------- POOLS ----------
+let poolsLoaded = false;
+let currentPoolId = null;
+let poolsById = {};
+
+async function loadPools() {
+  const loadingEl = document.getElementById("poolLoadingWrap");
+  const errorEl = document.getElementById("poolErrorWrap");
+  const emptyEl = document.getElementById("poolEmptyWrap");
+  loadingEl.classList.remove("hidden");
+  errorEl.classList.add("hidden");
+  emptyEl.classList.add("hidden");
+  try {
+    const pools = await fetchView("dash_available_pools");
+    poolsLoaded = true;
+    loadingEl.classList.add("hidden");
+    if (!pools.length) {
+      emptyEl.classList.remove("hidden");
+      return;
+    }
+    const select = document.getElementById("poolSelect");
+    select.innerHTML = "";
+    pools.forEach((p) => {
+      poolsById[p.pool_id] = p;
+      const opt = document.createElement("option");
+      opt.value = p.pool_id;
+      opt.textContent = p.name;
+      select.appendChild(opt);
+    });
+    currentPoolId = pools[0].pool_id;
+    select.value = currentPoolId;
+    await loadPoolData(currentPoolId);
+  } catch (e) {
+    loadingEl.classList.add("hidden");
+    errorEl.textContent = "Couldn't load pools: " + e.message;
+    errorEl.classList.remove("hidden");
+  }
+}
+
+document.getElementById("poolSelect").addEventListener("change", (e) => {
+  currentPoolId = e.target.value;
+  loadPoolData(currentPoolId);
+});
+
+async function loadPoolData(poolId) {
+  const loadingEl = document.getElementById("poolLoadingWrap");
+  const errorEl = document.getElementById("poolErrorWrap");
+  const bodyEl = document.getElementById("poolBody");
+  const gradingNote = document.getElementById("poolGradingNote");
+  loadingEl.classList.remove("hidden");
+  errorEl.classList.add("hidden");
+  bodyEl.classList.add("hidden");
+
+  try {
+    const [newVsRepeat, answerBreakdown, top10, cumulative] = await Promise.all([
+      callRpc("dash_pool_new_vs_repeat", { p_pool_id: poolId }),
+      callRpc("dash_pool_answer_pct", { p_pool_id: poolId }),
+      callRpc("dash_pool_top10", { p_pool_id: poolId }),
+      fetchView("dash_pool_cumulative_top5"),
+    ]);
+
+    const anyGraded = answerBreakdown.some((r) => r.is_correct === true);
+    gradingNote.classList.toggle("hidden", anyGraded);
+
+    const nv = newVsRepeat[0] || {};
+    document.getElementById("statPoolParticipants").textContent = nv.total_participants ?? "—";
+    document.getElementById("statPoolNewRepeat").textContent =
+      (nv.pct_new ?? 0) + "% new · " + (nv.pct_repeat ?? 0) + "% repeat";
+
+    // Answer breakdown grouped by question
+    const wrap = document.getElementById("poolAnswerBreakdownWrap");
+    wrap.innerHTML = "";
+    if (!answerBreakdown || !answerBreakdown.length) {
+      wrap.innerHTML = '<div class="empty-note">No picks for this pool yet.</div>';
+    } else {
+      const byQuestion = {};
+      answerBreakdown.forEach((r) => {
+        if (!byQuestion[r.question_text]) byQuestion[r.question_text] = [];
+        byQuestion[r.question_text].push(r);
+      });
+      Object.keys(byQuestion).forEach((q) => {
+        const rows = byQuestion[q];
+        const block = document.createElement("div");
+        block.className = "level-block";
+        const title = document.createElement("div");
+        title.className = "level-block-title";
+        title.textContent = q;
+        block.appendChild(title);
+        const table = document.createElement("table");
+        table.className = "breakdown";
+        table.innerHTML = "<thead><tr><th>Answer</th><th>Picks</th><th>% of question</th><th>Outcome</th></tr></thead><tbody></tbody>";
+        const tbody = table.querySelector("tbody");
+        rows.forEach((r) => {
+          const tr = document.createElement("tr");
+          if (r.is_correct) tr.className = "correct-row";
+          tr.innerHTML =
+            "<td>" + r.answer_label + "</td>" +
+            "<td>" + r.pick_count + "</td>" +
+            "<td>" + (r.pct_of_question ?? 0) + "%</td>" +
+            "<td>" + (r.is_correct === true ? "Correct" : r.is_correct === false ? "Incorrect" : "—") + "</td>";
+          tbody.appendChild(tr);
+        });
+        block.appendChild(table);
+        wrap.appendChild(block);
+      });
+    }
+
+    renderRows("poolTop10Table", top10, (r, i) => {
+      const tr = document.createElement("tr");
+      const name = (r.first_name || r.last_name) ? ((r.first_name || "") + " " + (r.last_name || "")).trim() : (r.nickname || "—");
+      tr.innerHTML =
+        "<td>" + (top10.indexOf(r) + 1) + "</td>" +
+        "<td>" + name + "</td>" +
+        "<td>" + r.correct_count + "</td>" +
+        "<td>" + r.total_questions + "</td>" +
+        "<td>" + (r.pct_correct ?? 0) + "%</td>";
+      return tr;
+    }, "No scores yet for this pool.");
+
+    renderRows("poolCumulativeTable", cumulative, (r) => {
+      const tr = document.createElement("tr");
+      const name = (r.first_name || r.last_name) ? ((r.first_name || "") + " " + (r.last_name || "")).trim() : (r.nickname || "—");
+      tr.innerHTML =
+        "<td>" + (cumulative.indexOf(r) + 1) + "</td>" +
+        "<td>" + name + "</td>" +
+        "<td>" + r.total_points + "</td>" +
+        "<td>" + r.pools_played + "</td>";
+      return tr;
+    }, "No cumulative scores yet.");
+
+    loadingEl.classList.add("hidden");
+    bodyEl.classList.remove("hidden");
+  } catch (e) {
+    loadingEl.classList.add("hidden");
+    errorEl.textContent = "Couldn't load pool data: " + e.message;
+    errorEl.classList.remove("hidden");
+  }
+}
 
 loadAll();
 </script>
