@@ -619,6 +619,34 @@
           <div><canvas id="chartTimeToAdvance2026"></canvas></div>
         </div>
       </div>
+
+      <div class="panel">
+        <div class="panel-title">Quit points</div>
+        <div class="panel-sub">Where players give up — level they were stuck on when they stopped playing (3+ weeks with no pick, never returned), and how many consecutive attempts they'd made</div>
+        <div class="three-col">
+          <div>
+            <div class="season-col-title" style="border:none;padding:0;margin-bottom:6px;">2024</div>
+            <table class="breakdown" id="quitPointsTable2024">
+              <thead><tr><th>Level</th><th>Quitters</th><th>Avg attempts</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div>
+            <div class="season-col-title" style="border:none;padding:0;margin-bottom:6px;">2025</div>
+            <table class="breakdown" id="quitPointsTable2025">
+              <thead><tr><th>Level</th><th>Quitters</th><th>Avg attempts</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div>
+            <div class="season-col-title" style="border:none;padding:0;margin-bottom:6px;">2026 (current)</div>
+            <table class="breakdown" id="quitPointsTable2026">
+              <thead><tr><th>Level</th><th>Quitters</th><th>Avg attempts</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1213,6 +1241,7 @@ async function loadArchiveData() {
       ttaOverall2024, tta2024,
       ttaOverall2025, tta2025,
       ttaOverall2026, tta2026,
+      quitPoints2024, quitPoints2025, quitPoints2026,
     ] = await Promise.all([
       callRpc("dash_archive_season_summary", { p_season_start: "2024-01-01", p_season_end: "2025-09-01" }),
       callRpc("dash_archive_active_by_week", { p_season_start: "2024-01-01", p_season_end: "2025-09-01" }),
@@ -1243,6 +1272,9 @@ async function loadArchiveData() {
       callRpc("dash_archive_time_to_advance", { p_season_start: "2025-09-01", p_season_end: "2026-09-01" }),
       callRpc("dash_current_time_to_advance_overall", {}),
       callRpc("dash_current_time_to_advance", {}),
+      callRpc("dash_archive_quit_points", { p_season_start: "2024-01-01", p_season_end: "2025-09-01" }),
+      callRpc("dash_archive_quit_points", { p_season_start: "2025-09-01", p_season_end: "2026-09-01" }),
+      callRpc("dash_current_quit_points", {}),
     ]);
 
     archiveLoaded = true;
@@ -1367,6 +1399,21 @@ async function loadArchiveData() {
       tta2026.map((r) => r.avg_attempts),
       "#C9A24B"
     );
+
+    // Quit points tables
+    function renderQuitTable(tableId, rows) {
+      renderRows(tableId, rows, (r) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML =
+          "<td>Level " + r.level_number + "</td>" +
+          "<td>" + r.quitters + "</td>" +
+          "<td>" + r.avg_attempts_before_quitting + "</td>";
+        return tr;
+      }, "No quitters recorded at any level.");
+    }
+    renderQuitTable("quitPointsTable2024", quitPoints2024);
+    renderQuitTable("quitPointsTable2025", quitPoints2025);
+    renderQuitTable("quitPointsTable2026", quitPoints2026);
 
     loadingEl.classList.add("hidden");
     bodyEl.classList.remove("hidden");
