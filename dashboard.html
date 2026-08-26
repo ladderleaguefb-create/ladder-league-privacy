@@ -249,6 +249,7 @@
     <button class="tab-btn active" id="tabOverviewBtn">Overview</button>
     <button class="tab-btn" id="tabWeeklyBtn">Weekly Stats</button>
     <button class="tab-btn" id="tabPoolsBtn">Pools</button>
+    <button class="tab-btn" id="tabArchiveBtn">2024 Archive</button>
     <button class="tab-btn" id="tabRosterBtn">User Roster</button>
   </div>
 </div>
@@ -418,6 +419,52 @@
     </div>
   </div>
 
+  <div id="archiveTab" class="hidden">
+    <div class="week-select-row">
+      <span class="grading-note" style="background:rgba(92,106,95,0.12);color:var(--slate);">2024 regular season (weeks 1–17) — playoffs and a known week 18 data gap excluded</span>
+    </div>
+
+    <div id="archiveLoadingWrap" class="loading-wrap"><span>Loading 2024 season data…</span></div>
+    <div id="archiveErrorWrap" class="error-wrap hidden"></div>
+
+    <div id="archiveBody" class="hidden">
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-value" id="statArchiveTotalPlayers">—</div>
+          <div class="stat-label">Unique players (2024)</div>
+          <div class="stat-sub" id="statArchiveTotalPicks"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Active players per week</div>
+        <div class="panel-sub">2024 regular season, weeks 1–17</div>
+        <canvas id="archiveActiveChart"></canvas>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Final level distribution</div>
+        <div class="panel-sub">Where players landed by the end of week 17, 2024</div>
+        <canvas id="archiveLevelChart"></canvas>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Bonus answer split by week</div>
+        <div class="panel-sub">Yes / No breakdown, 2024 regular season</div>
+        <canvas id="archiveBonusChart"></canvas>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Level distribution by week</div>
+        <div class="panel-sub">How players were spread across levels as the season progressed</div>
+        <table class="breakdown" id="archiveLevelByWeekTable">
+          <thead><tr><th>Week</th><th>Level</th><th>Picks</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <div id="rosterTab" class="hidden">
     <div id="rosterGate" class="gate">
       <h3>Roster is locked</h3>
@@ -578,10 +625,10 @@ document.getElementById("refreshBtn").addEventListener("click", () => {
 });
 
 function showTab(tabId, btnId) {
-  ["overviewTab", "weeklyTab", "poolsTab", "rosterTab"].forEach((id) => {
+  ["overviewTab", "weeklyTab", "poolsTab", "archiveTab", "rosterTab"].forEach((id) => {
     document.getElementById(id).classList.toggle("hidden", id !== tabId);
   });
-  ["tabOverviewBtn", "tabWeeklyBtn", "tabPoolsBtn", "tabRosterBtn"].forEach((id) => {
+  ["tabOverviewBtn", "tabWeeklyBtn", "tabPoolsBtn", "tabArchiveBtn", "tabRosterBtn"].forEach((id) => {
     document.getElementById(id).classList.toggle("active", id === btnId);
   });
 }
@@ -602,6 +649,11 @@ document.getElementById("tabWeeklyBtn").addEventListener("click", () => {
 document.getElementById("tabPoolsBtn").addEventListener("click", () => {
   showTab("poolsTab", "tabPoolsBtn");
   if (!poolsLoaded) loadPools();
+});
+
+document.getElementById("tabArchiveBtn").addEventListener("click", () => {
+  showTab("archiveTab", "tabArchiveBtn");
+  if (!archiveLoaded) loadArchiveData();
 });
 
 // ---------- WEEKLY STATS ----------
@@ -951,6 +1003,79 @@ async function loadPoolData(poolId) {
   } catch (e) {
     loadingEl.classList.add("hidden");
     errorEl.textContent = "Couldn't load pool data: " + e.message;
+    errorEl.classList.remove("hidden");
+  }
+}
+
+// ---------- 2024 ARCHIVE ----------
+let archiveLoaded = false;
+
+async function loadArchiveData() {
+  const loadingEl = document.getElementById("archiveLoadingWrap");
+  const errorEl = document.getElementById("archiveErrorWrap");
+  const bodyEl = document.getElementById("archiveBody");
+  loadingEl.classList.remove("hidden");
+  errorEl.classList.add("hidden");
+  bodyEl.classList.add("hidden");
+
+  try {
+    const [summary, activeByWeek, levelDist, bonusByWeek, levelByWeek] = await Promise.all([
+      callRpc("dash_archive_season_summary", {}),
+      callRpc("dash_archive_active_by_week", {}),
+      callRpc("dash_archive_final_level_distribution", {}),
+      callRpc("dash_archive_bonus_by_week", {}),
+      callRpc("dash_archive_level_by_week", {}),
+    ]);
+
+    archiveLoaded = true;
+
+    const s = summary[0] || {};
+    document.getElementById("statArchiveTotalPlayers").textContent = s.total_unique_players ?? "—";
+    document.getElementById("statArchiveTotalPicks").textContent = (s.total_picks ?? 0) + " total picks across " + (s.weeks_played ?? 0) + " weeks";
+
+    renderLineChart(
+      "archiveActiveChart",
+      activeByWeek.map((r) => "Wk " + r.week_number),
+      activeByWeek.map((r) => r.active_players),
+      "#1B3B24"
+    );
+
+    renderBarChart(
+      "archiveLevelChart",
+      levelDist.map((r) => "Lv " + r.level_number),
+      levelDist.map((r) => r.user_count),
+      "#C9A24B"
+    );
+
+    // Bonus chart: stacked-ish view via two series isn't native to our simple
+    // bar helper, so render Yes % per week as a single line — simplest honest
+    // read of the split without building a new chart type.
+    const bonusYesByWeek = {};
+    bonusByWeek.forEach((r) => {
+      if (r.bonus_answer === "Yes") bonusYesByWeek[r.week_number] = r.pct_of_week;
+    });
+    const bonusWeeks = [...new Set(bonusByWeek.map((r) => r.week_number))].sort((a, b) => a - b);
+    renderLineChart(
+      "archiveBonusChart",
+      bonusWeeks.map((w) => "Wk " + w),
+      bonusWeeks.map((w) => bonusYesByWeek[w] ?? null),
+      "#5C7A5F"
+    );
+
+    renderRows("archiveLevelByWeekTable", levelByWeek, (r) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML =
+        "<td>Week " + r.week_number + "</td>" +
+        "<td>Level " + r.level_number + "</td>" +
+        "<td>" + r.picks_at_level + "</td>";
+      return tr;
+    }, "No archive data found.");
+
+    loadingEl.classList.add("hidden");
+    bodyEl.classList.remove("hidden");
+  } catch (e) {
+    loadingEl.classList.add("hidden");
+    errorEl.textContent = "Couldn't load 2024 archive data: " + e.message;
     errorEl.classList.remove("hidden");
   }
 }
