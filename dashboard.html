@@ -130,6 +130,38 @@
   .panel-sub { font-size: 12px; color: var(--slate); margin-bottom: 14px; }
   .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
   @media (max-width: 640px) { .two-col { grid-template-columns: 1fr; } }
+  .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+  @media (max-width: 900px) { .three-col { grid-template-columns: 1fr; } }
+  .season-col {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 16px;
+  }
+  .season-col-title {
+    font-family: 'Oswald', 'Inter', sans-serif;
+    font-size: 15px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--gold);
+  }
+  .season-stat { margin-bottom: 10px; }
+  .season-stat-value {
+    font-family: Georgia, serif;
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .season-stat-label {
+    font-size: 11px;
+    color: var(--slate);
+    margin-top: 3px;
+  }
+  .season-chart-wrap { margin-top: 12px; }
+  .season-chart-wrap canvas { max-height: 160px; }
   canvas { max-height: 220px; }
   .hidden { display: none !important; }
   .loading-wrap, .error-wrap {
@@ -249,7 +281,7 @@
     <button class="tab-btn active" id="tabOverviewBtn">Overview</button>
     <button class="tab-btn" id="tabWeeklyBtn">Weekly Stats</button>
     <button class="tab-btn" id="tabPoolsBtn">Pools</button>
-    <button class="tab-btn" id="tabArchiveBtn">2024 Archive</button>
+    <button class="tab-btn" id="tabArchiveBtn">Season Comparison</button>
     <button class="tab-btn" id="tabRosterBtn">User Roster</button>
   </div>
 </div>
@@ -421,46 +453,73 @@
 
   <div id="archiveTab" class="hidden">
     <div class="week-select-row">
-      <span class="grading-note" style="background:rgba(92,106,95,0.12);color:var(--slate);">2024 regular season (weeks 1–17) — playoffs and a known week 18 data gap excluded</span>
+      <span class="grading-note" style="background:rgba(92,106,95,0.12);color:var(--slate);">Regular season only (weeks 1–17) for each year — playoffs excluded, 2024 has a known week 18 data gap</span>
     </div>
 
-    <div id="archiveLoadingWrap" class="loading-wrap"><span>Loading 2024 season data…</span></div>
+    <div id="archiveLoadingWrap" class="loading-wrap"><span>Loading season comparison…</span></div>
     <div id="archiveErrorWrap" class="error-wrap hidden"></div>
 
     <div id="archiveBody" class="hidden">
-      <div class="stat-grid">
-        <div class="stat-card">
-          <div class="stat-value" id="statArchiveTotalPlayers">—</div>
-          <div class="stat-label">Unique players (2024)</div>
-          <div class="stat-sub" id="statArchiveTotalPicks"></div>
+      <div class="three-col">
+        <div class="season-col">
+          <div class="season-col-title">2024</div>
+          <div class="season-stat">
+            <div class="season-stat-value" id="stat2024Players">—</div>
+            <div class="season-stat-label">Unique players</div>
+          </div>
+          <div class="season-stat">
+            <div class="season-stat-value" id="stat2024Picks">—</div>
+            <div class="season-stat-label">Total picks (season)</div>
+          </div>
+          <div class="season-chart-wrap">
+            <div class="panel-sub" style="margin-bottom:4px;">Active players/week</div>
+            <canvas id="chart2024Active"></canvas>
+          </div>
+          <div class="season-chart-wrap">
+            <div class="panel-sub" style="margin-bottom:4px;">Final level distribution</div>
+            <canvas id="chart2024Level"></canvas>
+          </div>
         </div>
-      </div>
 
-      <div class="panel">
-        <div class="panel-title">Active players per week</div>
-        <div class="panel-sub">2024 regular season, weeks 1–17</div>
-        <canvas id="archiveActiveChart"></canvas>
-      </div>
+        <div class="season-col">
+          <div class="season-col-title">2025</div>
+          <div class="season-stat">
+            <div class="season-stat-value" id="stat2025Players">—</div>
+            <div class="season-stat-label">Unique players</div>
+          </div>
+          <div class="season-stat">
+            <div class="season-stat-value" id="stat2025Picks">—</div>
+            <div class="season-stat-label">Total picks (season)</div>
+          </div>
+          <div class="season-chart-wrap">
+            <div class="panel-sub" style="margin-bottom:4px;">Active players/week</div>
+            <canvas id="chart2025Active"></canvas>
+          </div>
+          <div class="season-chart-wrap">
+            <div class="panel-sub" style="margin-bottom:4px;">Final level distribution</div>
+            <canvas id="chart2025Level"></canvas>
+          </div>
+        </div>
 
-      <div class="panel">
-        <div class="panel-title">Final level distribution</div>
-        <div class="panel-sub">Where players landed by the end of week 17, 2024</div>
-        <canvas id="archiveLevelChart"></canvas>
-      </div>
-
-      <div class="panel">
-        <div class="panel-title">Bonus answer split by week</div>
-        <div class="panel-sub">Yes / No breakdown, 2024 regular season</div>
-        <canvas id="archiveBonusChart"></canvas>
-      </div>
-
-      <div class="panel">
-        <div class="panel-title">Level distribution by week</div>
-        <div class="panel-sub">How players were spread across levels as the season progressed</div>
-        <table class="breakdown" id="archiveLevelByWeekTable">
-          <thead><tr><th>Week</th><th>Level</th><th>Picks</th></tr></thead>
-          <tbody></tbody>
-        </table>
+        <div class="season-col">
+          <div class="season-col-title">2026 (current)</div>
+          <div class="season-stat">
+            <div class="season-stat-value" id="stat2026Players">—</div>
+            <div class="season-stat-label">Unique players</div>
+          </div>
+          <div class="season-stat">
+            <div class="season-stat-value" id="stat2026Picks">—</div>
+            <div class="season-stat-label">Total picks (season)</div>
+          </div>
+          <div class="season-chart-wrap">
+            <div class="panel-sub" style="margin-bottom:4px;">Active players/week</div>
+            <canvas id="chart2026Active"></canvas>
+          </div>
+          <div class="season-chart-wrap">
+            <div class="panel-sub" style="margin-bottom:4px;">Final level distribution</div>
+            <canvas id="chart2026Level"></canvas>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -1007,7 +1066,7 @@ async function loadPoolData(poolId) {
   }
 }
 
-// ---------- 2024 ARCHIVE ----------
+// ---------- SEASON COMPARISON (2024 / 2025 / 2026) ----------
 let archiveLoaded = false;
 
 async function loadArchiveData() {
@@ -1019,63 +1078,53 @@ async function loadArchiveData() {
   bodyEl.classList.add("hidden");
 
   try {
-    const [summary, activeByWeek, levelDist, bonusByWeek, levelByWeek] = await Promise.all([
-      callRpc("dash_archive_season_summary", {}),
-      callRpc("dash_archive_active_by_week", {}),
-      callRpc("dash_archive_final_level_distribution", {}),
-      callRpc("dash_archive_bonus_by_week", {}),
-      callRpc("dash_archive_level_by_week", {}),
+    const [
+      summary2024, active2024, level2024,
+      summary2025, active2025, level2025,
+      summary2026, active2026, level2026,
+    ] = await Promise.all([
+      callRpc("dash_archive_season_summary", { p_season_start: "2024-01-01", p_season_end: "2025-09-01" }),
+      callRpc("dash_archive_active_by_week", { p_season_start: "2024-01-01", p_season_end: "2025-09-01" }),
+      callRpc("dash_archive_final_level_distribution", { p_season_start: "2024-01-01", p_season_end: "2025-09-01" }),
+      callRpc("dash_archive_season_summary", { p_season_start: "2025-09-01", p_season_end: "2026-09-01" }),
+      callRpc("dash_archive_active_by_week", { p_season_start: "2025-09-01", p_season_end: "2026-09-01" }),
+      callRpc("dash_archive_final_level_distribution", { p_season_start: "2025-09-01", p_season_end: "2026-09-01" }),
+      callRpc("dash_current_season_summary", {}),
+      callRpc("dash_current_active_by_week", {}),
+      callRpc("dash_current_final_level_distribution", {}),
     ]);
 
     archiveLoaded = true;
 
-    const s = summary[0] || {};
-    document.getElementById("statArchiveTotalPlayers").textContent = s.total_unique_players ?? "—";
-    document.getElementById("statArchiveTotalPicks").textContent = (s.total_picks ?? 0) + " total picks across " + (s.weeks_played ?? 0) + " weeks";
+    function renderSeasonColumn(prefix, summaryRows, activeRows, levelRows, activeColor, levelColor) {
+      const s = summaryRows[0] || {};
+      document.getElementById("stat" + prefix + "Players").textContent = s.total_unique_players ?? "—";
+      document.getElementById("stat" + prefix + "Picks").textContent = s.total_picks ?? "—";
 
-    renderLineChart(
-      "archiveActiveChart",
-      activeByWeek.map((r) => "Wk " + r.week_number),
-      activeByWeek.map((r) => r.active_players),
-      "#1B3B24"
-    );
+      renderLineChart(
+        "chart" + prefix + "Active",
+        activeRows.map((r) => "Wk " + r.week_number),
+        activeRows.map((r) => r.active_players),
+        activeColor
+      );
 
-    renderBarChart(
-      "archiveLevelChart",
-      levelDist.map((r) => "Lv " + r.level_number),
-      levelDist.map((r) => r.user_count),
-      "#C9A24B"
-    );
+      renderBarChart(
+        "chart" + prefix + "Level",
+        levelRows.map((r) => "Lv " + r.level_number),
+        levelRows.map((r) => r.user_count),
+        levelColor
+      );
+    }
 
-    // Bonus chart: stacked-ish view via two series isn't native to our simple
-    // bar helper, so render Yes % per week as a single line — simplest honest
-    // read of the split without building a new chart type.
-    const bonusYesByWeek = {};
-    bonusByWeek.forEach((r) => {
-      if (r.bonus_answer === "Yes") bonusYesByWeek[r.week_number] = r.pct_of_week;
-    });
-    const bonusWeeks = [...new Set(bonusByWeek.map((r) => r.week_number))].sort((a, b) => a - b);
-    renderLineChart(
-      "archiveBonusChart",
-      bonusWeeks.map((w) => "Wk " + w),
-      bonusWeeks.map((w) => bonusYesByWeek[w] ?? null),
-      "#5C7A5F"
-    );
-
-    renderRows("archiveLevelByWeekTable", levelByWeek, (r) => {
-      const tr = document.createElement("tr");
-      tr.innerHTML =
-        "<td>Week " + r.week_number + "</td>" +
-        "<td>Level " + r.level_number + "</td>" +
-        "<td>" + r.picks_at_level + "</td>";
-      return tr;
-    }, "No archive data found.");
+    renderSeasonColumn("2024", summary2024, active2024, level2024, "#1B3B24", "#C9A24B");
+    renderSeasonColumn("2025", summary2025, active2025, level2025, "#5C7A5F", "#C9A24B");
+    renderSeasonColumn("2026", summary2026, active2026, level2026, "#C9A24B", "#1B3B24");
 
     loadingEl.classList.add("hidden");
     bodyEl.classList.remove("hidden");
   } catch (e) {
     loadingEl.classList.add("hidden");
-    errorEl.textContent = "Couldn't load 2024 archive data: " + e.message;
+    errorEl.textContent = "Couldn't load season comparison: " + e.message;
     errorEl.classList.remove("hidden");
   }
 }
