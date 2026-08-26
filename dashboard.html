@@ -521,6 +521,60 @@
           </div>
         </div>
       </div>
+
+      <div class="panel">
+        <div class="panel-title">Pre-season signup ramp-up</div>
+        <div class="panel-sub">Daily signups counting down to kickoff — 2024 excluded (archive data incomplete, see notes)</div>
+        <canvas id="preseasonChart"></canvas>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Completion rate</div>
+        <div class="panel-sub">Average % of the season each player completed, and the real shape behind it</div>
+        <div class="three-col" id="completionAvgRow">
+          <div class="season-col">
+            <div class="season-col-title">2024</div>
+            <div class="season-stat">
+              <div class="season-stat-value" id="statCompletionAvg2024">—</div>
+              <div class="season-stat-label">Avg. completion</div>
+            </div>
+          </div>
+          <div class="season-col">
+            <div class="season-col-title">2025</div>
+            <div class="season-stat">
+              <div class="season-stat-value" id="statCompletionAvg2025">—</div>
+              <div class="season-stat-label">Avg. completion</div>
+            </div>
+          </div>
+          <div class="season-col">
+            <div class="season-col-title">2026 (current)</div>
+            <div class="season-stat">
+              <div class="season-stat-value" id="statCompletionAvg2026">—</div>
+              <div class="season-stat-label">Avg. completion</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Weeks played per player (exact)</div>
+        <div class="panel-sub">How many weeks each player actually played, 1–17</div>
+        <div class="three-col">
+          <div><canvas id="chartWeeksExact2024"></canvas></div>
+          <div><canvas id="chartWeeksExact2025"></canvas></div>
+          <div><canvas id="chartWeeksExact2026"></canvas></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">% of season completed (10% bands)</div>
+        <div class="panel-sub">Normalized view — useful for comparing a mid-season year against a full one</div>
+        <div class="three-col">
+          <div><canvas id="chartDeciles2024"></canvas></div>
+          <div><canvas id="chartDeciles2025"></canvas></div>
+          <div><canvas id="chartDeciles2026"></canvas></div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -611,6 +665,31 @@ function renderBarChart(id, labels, data, color) {
     data: { labels, datasets: [{ data, backgroundColor: color, borderRadius: 4 }] },
     options: {
       plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 10 }, color: "#5B6B5E" } },
+        y: { grid: { color: "rgba(22,36,26,0.08)" }, ticks: { font: { size: 10 }, color: "#5B6B5E", precision: 0 } },
+      },
+    },
+  });
+}
+
+// Multi-series version of the chart helpers — used for comparing
+// 2+ seasons on the same axis (e.g. pre-season signup ramp-up).
+// type: "line" or "bar". series: [{ name, color, values }, ...]
+function renderChart(id, type, series, labels) {
+  if (charts[id]) charts[id].destroy();
+  const ctx = document.getElementById(id).getContext("2d");
+  const datasets = series.map((s) => {
+    if (type === "line") {
+      return { label: s.name, data: s.values, borderColor: s.color, borderWidth: 2.5, pointRadius: 0, tension: 0.3 };
+    }
+    return { label: s.name, data: s.values, backgroundColor: s.color, borderRadius: 4 };
+  });
+  charts[id] = new Chart(ctx, {
+    type,
+    data: { labels, datasets },
+    options: {
+      plugins: { legend: { display: true, labels: { font: { size: 11 }, color: "#5B6B5E" } } },
       scales: {
         x: { grid: { display: false }, ticks: { font: { size: 10 }, color: "#5B6B5E" } },
         y: { grid: { color: "rgba(22,36,26,0.08)" }, ticks: { font: { size: 10 }, color: "#5B6B5E", precision: 0 } },
@@ -1082,6 +1161,10 @@ async function loadArchiveData() {
       summary2024, active2024, level2024,
       summary2025, active2025, level2025,
       summary2026, active2026, level2026,
+      preseason2025, preseason2026,
+      completionAvg2024, completionDist2024, completionDeciles2024,
+      completionAvg2025, completionDist2025, completionDeciles2025,
+      completionAvg2026, completionDist2026, completionDeciles2026,
     ] = await Promise.all([
       callRpc("dash_archive_season_summary", { p_season_start: "2024-01-01", p_season_end: "2025-09-01" }),
       callRpc("dash_archive_active_by_week", { p_season_start: "2024-01-01", p_season_end: "2025-09-01" }),
@@ -1092,6 +1175,17 @@ async function loadArchiveData() {
       callRpc("dash_current_season_summary", {}),
       callRpc("dash_current_active_by_week", {}),
       callRpc("dash_current_final_level_distribution", {}),
+      callRpc("dash_preseason_signups_2025", { p_kickoff: "2025-09-04" }),
+      callRpc("dash_preseason_signups_current", { p_kickoff: "2026-09-09" }),
+      callRpc("dash_archive_completion_avg", { p_season_start: "2024-01-01", p_season_end: "2025-09-01" }),
+      callRpc("dash_archive_completion_distribution", { p_season_start: "2024-01-01", p_season_end: "2025-09-01" }),
+      callRpc("dash_archive_completion_deciles", { p_season_start: "2024-01-01", p_season_end: "2025-09-01" }),
+      callRpc("dash_archive_completion_avg", { p_season_start: "2025-09-01", p_season_end: "2026-09-01" }),
+      callRpc("dash_archive_completion_distribution", { p_season_start: "2025-09-01", p_season_end: "2026-09-01" }),
+      callRpc("dash_archive_completion_deciles", { p_season_start: "2025-09-01", p_season_end: "2026-09-01" }),
+      callRpc("dash_current_completion_avg", {}),
+      callRpc("dash_current_completion_distribution", {}),
+      callRpc("dash_current_completion_deciles", {}),
     ]);
 
     archiveLoaded = true;
@@ -1119,6 +1213,66 @@ async function loadArchiveData() {
     renderSeasonColumn("2024", summary2024, active2024, level2024, "#1B3B24", "#C9A24B");
     renderSeasonColumn("2025", summary2025, active2025, level2025, "#5C7A5F", "#C9A24B");
     renderSeasonColumn("2026", summary2026, active2026, level2026, "#C9A24B", "#1B3B24");
+
+    // Pre-season signups: 2025 vs 2026, aligned by days before kickoff
+    const allDays = new Set();
+    preseason2025.forEach((r) => allDays.add(r.days_before_kickoff));
+    preseason2026.forEach((r) => allDays.add(r.days_before_kickoff));
+    const sortedDays = [...allDays].sort((a, b) => a - b);
+    const p2025Map = {};
+    preseason2025.forEach((r) => { p2025Map[r.days_before_kickoff] = r.signups; });
+    const p2026Map = {};
+    preseason2026.forEach((r) => { p2026Map[r.days_before_kickoff] = r.signups; });
+
+    renderChart("preseasonChart", "line", [
+      { name: "2025", color: "#5C7A5F", values: sortedDays.map((d) => p2025Map[d] ?? 0) },
+      { name: "2026", color: "#C9A24B", values: sortedDays.map((d) => p2026Map[d] ?? 0) },
+    ], sortedDays.map((d) => d.toString()));
+
+    // Completion rate averages
+    document.getElementById("statCompletionAvg2024").textContent = (completionAvg2024[0]?.avg_completion_pct ?? "—") + "%";
+    document.getElementById("statCompletionAvg2025").textContent = (completionAvg2025[0]?.avg_completion_pct ?? "—") + "%";
+    document.getElementById("statCompletionAvg2026").textContent = (completionAvg2026[0]?.avg_completion_pct ?? "—") + "%";
+
+    // Exact weeks-played histograms (1-17)
+    renderBarChart(
+      "chartWeeksExact2024",
+      completionDist2024.map((r) => r.weeks_played.toString()),
+      completionDist2024.map((r) => r.player_count),
+      "#1B3B24"
+    );
+    renderBarChart(
+      "chartWeeksExact2025",
+      completionDist2025.map((r) => r.weeks_played.toString()),
+      completionDist2025.map((r) => r.player_count),
+      "#5C7A5F"
+    );
+    renderBarChart(
+      "chartWeeksExact2026",
+      completionDist2026.map((r) => r.weeks_played.toString()),
+      completionDist2026.map((r) => r.player_count),
+      "#C9A24B"
+    );
+
+    // Decile (10% band) views
+    renderBarChart(
+      "chartDeciles2024",
+      completionDeciles2024.map((r) => r.decile_bucket),
+      completionDeciles2024.map((r) => r.player_count),
+      "#1B3B24"
+    );
+    renderBarChart(
+      "chartDeciles2025",
+      completionDeciles2025.map((r) => r.decile_bucket),
+      completionDeciles2025.map((r) => r.player_count),
+      "#5C7A5F"
+    );
+    renderBarChart(
+      "chartDeciles2026",
+      completionDeciles2026.map((r) => r.decile_bucket),
+      completionDeciles2026.map((r) => r.player_count),
+      "#C9A24B"
+    );
 
     loadingEl.classList.add("hidden");
     bodyEl.classList.remove("hidden");
