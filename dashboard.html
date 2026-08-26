@@ -575,6 +575,50 @@
           <div><canvas id="chartDeciles2026"></canvas></div>
         </div>
       </div>
+
+      <div class="panel">
+        <div class="panel-title">Retention from Week 1</div>
+        <div class="panel-sub">% of week-1 players still active at weeks 5, 9, 13, and 17</div>
+        <canvas id="retentionChart"></canvas>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Time to advance</div>
+        <div class="panel-sub">Average attempts before passing each level (only counts players who eventually passed)</div>
+        <div class="three-col" id="timeToAdvanceOverallRow">
+          <div class="season-col">
+            <div class="season-col-title">2024</div>
+            <div class="season-stat">
+              <div class="season-stat-value" id="statTimeToAdvance2024">—</div>
+              <div class="season-stat-label">Avg. attempts (all levels)</div>
+            </div>
+          </div>
+          <div class="season-col">
+            <div class="season-col-title">2025</div>
+            <div class="season-stat">
+              <div class="season-stat-value" id="statTimeToAdvance2025">—</div>
+              <div class="season-stat-label">Avg. attempts (all levels)</div>
+            </div>
+          </div>
+          <div class="season-col">
+            <div class="season-col-title">2026 (current)</div>
+            <div class="season-stat">
+              <div class="season-stat-value" id="statTimeToAdvance2026">—</div>
+              <div class="season-stat-label">Avg. attempts (all levels)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Time to advance by level</div>
+        <div class="panel-sub">Where the game gets harder — which levels take the most attempts</div>
+        <div class="three-col">
+          <div><canvas id="chartTimeToAdvance2024"></canvas></div>
+          <div><canvas id="chartTimeToAdvance2025"></canvas></div>
+          <div><canvas id="chartTimeToAdvance2026"></canvas></div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1165,6 +1209,10 @@ async function loadArchiveData() {
       completionAvg2024, completionDist2024, completionDeciles2024,
       completionAvg2025, completionDist2025, completionDeciles2025,
       completionAvg2026, completionDist2026, completionDeciles2026,
+      retention2024, retention2025, retention2026,
+      ttaOverall2024, tta2024,
+      ttaOverall2025, tta2025,
+      ttaOverall2026, tta2026,
     ] = await Promise.all([
       callRpc("dash_archive_season_summary", { p_season_start: "2024-01-01", p_season_end: "2025-09-01" }),
       callRpc("dash_archive_active_by_week", { p_season_start: "2024-01-01", p_season_end: "2025-09-01" }),
@@ -1186,6 +1234,15 @@ async function loadArchiveData() {
       callRpc("dash_current_completion_avg", {}),
       callRpc("dash_current_completion_distribution", {}),
       callRpc("dash_current_completion_deciles", {}),
+      callRpc("dash_archive_retention", { p_season_start: "2024-01-01", p_season_end: "2025-09-01" }),
+      callRpc("dash_archive_retention", { p_season_start: "2025-09-01", p_season_end: "2026-09-01" }),
+      callRpc("dash_current_retention", {}),
+      callRpc("dash_archive_time_to_advance_overall", { p_season_start: "2024-01-01", p_season_end: "2025-09-01" }),
+      callRpc("dash_archive_time_to_advance", { p_season_start: "2024-01-01", p_season_end: "2025-09-01" }),
+      callRpc("dash_archive_time_to_advance_overall", { p_season_start: "2025-09-01", p_season_end: "2026-09-01" }),
+      callRpc("dash_archive_time_to_advance", { p_season_start: "2025-09-01", p_season_end: "2026-09-01" }),
+      callRpc("dash_current_time_to_advance_overall", {}),
+      callRpc("dash_current_time_to_advance", {}),
     ]);
 
     archiveLoaded = true;
@@ -1271,6 +1328,43 @@ async function loadArchiveData() {
       "chartDeciles2026",
       completionDeciles2026.map((r) => r.decile_bucket),
       completionDeciles2026.map((r) => r.player_count),
+      "#C9A24B"
+    );
+
+    // Retention: one multi-series line chart, checkpoints 1/5/9/13/17
+    const checkpoints = [1, 5, 9, 13, 17];
+    function retentionMap(rows) {
+      const m = {};
+      rows.forEach((r) => { m[r.checkpoint_week] = r.retention_pct; });
+      return checkpoints.map((c) => m[c] ?? null);
+    }
+    renderChart("retentionChart", "line", [
+      { name: "2024", color: "#1B3B24", values: retentionMap(retention2024) },
+      { name: "2025", color: "#5C7A5F", values: retentionMap(retention2025) },
+      { name: "2026", color: "#C9A24B", values: retentionMap(retention2026) },
+    ], checkpoints.map((c) => "Wk " + c));
+
+    // Time to advance: overall averages + per-level bar charts
+    document.getElementById("statTimeToAdvance2024").textContent = (ttaOverall2024[0]?.avg_attempts ?? "—");
+    document.getElementById("statTimeToAdvance2025").textContent = (ttaOverall2025[0]?.avg_attempts ?? "—");
+    document.getElementById("statTimeToAdvance2026").textContent = (ttaOverall2026[0]?.avg_attempts ?? "—");
+
+    renderBarChart(
+      "chartTimeToAdvance2024",
+      tta2024.map((r) => "Lv " + r.level_number),
+      tta2024.map((r) => r.avg_attempts),
+      "#1B3B24"
+    );
+    renderBarChart(
+      "chartTimeToAdvance2025",
+      tta2025.map((r) => "Lv " + r.level_number),
+      tta2025.map((r) => r.avg_attempts),
+      "#5C7A5F"
+    );
+    renderBarChart(
+      "chartTimeToAdvance2026",
+      tta2026.map((r) => "Lv " + r.level_number),
+      tta2026.map((r) => r.avg_attempts),
       "#C9A24B"
     );
 
