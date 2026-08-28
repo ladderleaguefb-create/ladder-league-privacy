@@ -282,6 +282,7 @@
     <button class="tab-btn" id="tabWeeklyBtn">Weekly Stats</button>
     <button class="tab-btn" id="tabPoolsBtn">Pools</button>
     <button class="tab-btn" id="tabArchiveBtn">Season Comparison</button>
+    <button class="tab-btn" id="tabNotifBtn">Notifications</button>
     <button class="tab-btn" id="tabRosterBtn">User Roster</button>
   </div>
 </div>
@@ -650,6 +651,57 @@
     </div>
   </div>
 
+  <div id="notifTab" class="hidden">
+    <div id="notifLoadingWrap" class="loading-wrap"><span>Loading notification stats…</span></div>
+    <div id="notifErrorWrap" class="error-wrap hidden"></div>
+    <div id="notifEmptyWrap" class="empty-note hidden">No notification data yet — this will populate once notifications start sending.</div>
+
+    <div id="notifBody" class="hidden">
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-value" id="statNotifTotalSent">—</div>
+          <div class="stat-label">Total sent</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="statNotifTapRate">—</div>
+          <div class="stat-label">Overall tap rate</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="statNotifTopVolume">—</div>
+          <div class="stat-label">Most-sent type</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="statNotifTopRate">—</div>
+          <div class="stat-label">Highest tap-rate type</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">By notification type</div>
+        <div class="panel-sub">Sent, tapped, and tap rate for each notification type</div>
+        <table class="breakdown" id="notifByTypeTable">
+          <thead><tr><th>Type</th><th>Sent</th><th>Tapped</th><th>Tap rate</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Sent &amp; tapped over time</div>
+        <div class="panel-sub">Weekly volume</div>
+        <canvas id="notifTrendChart"></canvas>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Did it work? (end-event conversions)</div>
+        <div class="panel-sub">Of notifications sent, how many led to the intended action within the tracking window</div>
+        <table class="breakdown" id="notifConversionsTable">
+          <thead><tr><th>Notification</th><th>Outcome</th><th>Window</th><th>Sent</th><th>Converted</th><th>Rate</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <div id="rosterTab" class="hidden">
     <div id="rosterGate" class="gate">
       <h3>Roster is locked</h3>
@@ -835,10 +887,10 @@ document.getElementById("refreshBtn").addEventListener("click", () => {
 });
 
 function showTab(tabId, btnId) {
-  ["overviewTab", "weeklyTab", "poolsTab", "archiveTab", "rosterTab"].forEach((id) => {
+  ["overviewTab", "weeklyTab", "poolsTab", "archiveTab", "notifTab", "rosterTab"].forEach((id) => {
     document.getElementById(id).classList.toggle("hidden", id !== tabId);
   });
-  ["tabOverviewBtn", "tabWeeklyBtn", "tabPoolsBtn", "tabArchiveBtn", "tabRosterBtn"].forEach((id) => {
+  ["tabOverviewBtn", "tabWeeklyBtn", "tabPoolsBtn", "tabArchiveBtn", "tabNotifBtn", "tabRosterBtn"].forEach((id) => {
     document.getElementById(id).classList.toggle("active", id === btnId);
   });
 }
@@ -864,6 +916,11 @@ document.getElementById("tabPoolsBtn").addEventListener("click", () => {
 document.getElementById("tabArchiveBtn").addEventListener("click", () => {
   showTab("archiveTab", "tabArchiveBtn");
   if (!archiveLoaded) loadArchiveData();
+});
+
+document.getElementById("tabNotifBtn").addEventListener("click", () => {
+  showTab("notifTab", "tabNotifBtn");
+  if (!notifLoaded) loadNotifData();
 });
 
 // ---------- WEEKLY STATS ----------
@@ -1420,6 +1477,77 @@ async function loadArchiveData() {
   } catch (e) {
     loadingEl.classList.add("hidden");
     errorEl.textContent = "Couldn't load season comparison: " + e.message;
+    errorEl.classList.remove("hidden");
+  }
+}
+
+// ---------- NOTIFICATIONS ----------
+let notifLoaded = false;
+
+async function loadNotifData() {
+  const loadingEl = document.getElementById("notifLoadingWrap");
+  const errorEl = document.getElementById("notifErrorWrap");
+  const emptyEl = document.getElementById("notifEmptyWrap");
+  const bodyEl = document.getElementById("notifBody");
+  loadingEl.classList.remove("hidden");
+  errorEl.classList.add("hidden");
+  emptyEl.classList.add("hidden");
+  bodyEl.classList.add("hidden");
+
+  try {
+    const [summary, byType, trend, conversions] = await Promise.all([
+      callRpc("dash_notif_summary", {}),
+      callRpc("dash_notif_by_type", {}),
+      callRpc("dash_notif_weekly_trend", {}),
+      callRpc("dash_notif_conversions", {}),
+    ]);
+
+    notifLoaded = true;
+    const s = summary[0] || {};
+
+    if (!s.total_sent) {
+      loadingEl.classList.add("hidden");
+      emptyEl.classList.remove("hidden");
+      return;
+    }
+
+    document.getElementById("statNotifTotalSent").textContent = s.total_sent ?? "—";
+    document.getElementById("statNotifTapRate").textContent = (s.overall_tap_rate_pct ?? 0) + "%";
+    document.getElementById("statNotifTopVolume").textContent = s.top_type_by_volume ?? "—";
+    document.getElementById("statNotifTopRate").textContent = s.top_type_by_tap_rate ?? "—";
+
+    renderRows("notifByTypeTable", byType, (r) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML =
+        "<td>" + r.notification_type + "</td>" +
+        "<td>" + r.sent + "</td>" +
+        "<td>" + r.tapped + "</td>" +
+        "<td>" + (r.tap_rate_pct ?? 0) + "%</td>";
+      return tr;
+    }, "No notification types recorded yet.");
+
+    renderChart("notifTrendChart", "line", [
+      { name: "Sent", color: "#1B3B24", values: trend.map((r) => r.sent) },
+      { name: "Tapped", color: "#C9A24B", values: trend.map((r) => r.tapped) },
+    ], trend.map((r) => new Date(r.week_start).toLocaleDateString("en-US", { month: "short", day: "numeric" })));
+
+    renderRows("notifConversionsTable", conversions, (r) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML =
+        "<td>" + r.notification_type + "</td>" +
+        "<td>" + r.outcome + "</td>" +
+        "<td>" + r.window_hours + "h</td>" +
+        "<td>" + r.sent + "</td>" +
+        "<td>" + r.converted + "</td>" +
+        "<td>" + (r.conversion_rate_pct ?? "—") + (r.conversion_rate_pct !== null ? "%" : "") + "</td>";
+      return tr;
+    }, "No conversion data yet.");
+
+    loadingEl.classList.add("hidden");
+    bodyEl.classList.remove("hidden");
+  } catch (e) {
+    loadingEl.classList.add("hidden");
+    errorEl.textContent = "Couldn't load notification stats: " + e.message;
     errorEl.classList.remove("hidden");
   }
 }
