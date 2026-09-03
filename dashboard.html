@@ -298,6 +298,7 @@
     <button class="tab-btn" id="tabArchiveBtn">Season Comparison</button>
     <button class="tab-btn" id="tabNotifBtn">Notifications</button>
     <button class="tab-btn" id="tabRosterBtn">User Roster</button>
+    <button class="tab-btn" id="tabPoolRosterBtn">Pool Roster</button>
   </div>
 </div>
 
@@ -738,6 +739,33 @@
       </div>
     </div>
   </div>
+
+  <div id="poolRosterTab" class="hidden">
+    <div id="poolRosterGate" class="gate">
+      <h3>Roster is locked</h3>
+      <p>Enter the shared access code to view names and emails.</p>
+      <input type="password" id="poolRosterCodeInput" placeholder="Access code" />
+      <button id="poolRosterUnlockBtn">Unlock roster</button>
+      <div class="gate-error hidden" id="poolRosterError"></div>
+    </div>
+    <div id="poolRosterPanel" class="panel hidden">
+      <div class="panel-title">Pool roster</div>
+      <div class="week-select-row">
+        <label for="poolRosterSelect">Pool</label>
+        <select id="poolRosterSelect"></select>
+      </div>
+      <div class="panel-sub" id="poolRosterCount"></div>
+      <input type="text" id="poolRosterSearchInput" class="search-input" placeholder="Search by name, nickname, or email..." />
+      <div class="roster-wrap">
+        <table class="roster">
+          <thead>
+            <tr><th>Name</th><th>Nickname</th><th>Email</th></tr>
+          </thead>
+          <tbody id="poolRosterBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -902,10 +930,10 @@ document.getElementById("refreshBtn").addEventListener("click", () => {
 });
 
 function showTab(tabId, btnId) {
-  ["overviewTab", "weeklyTab", "poolsTab", "archiveTab", "notifTab", "rosterTab"].forEach((id) => {
+  ["overviewTab", "weeklyTab", "poolsTab", "archiveTab", "notifTab", "rosterTab", "poolRosterTab"].forEach((id) => {
     document.getElementById(id).classList.toggle("hidden", id !== tabId);
   });
-  ["tabOverviewBtn", "tabWeeklyBtn", "tabPoolsBtn", "tabArchiveBtn", "tabNotifBtn", "tabRosterBtn"].forEach((id) => {
+  ["tabOverviewBtn", "tabWeeklyBtn", "tabPoolsBtn", "tabArchiveBtn", "tabNotifBtn", "tabRosterBtn", "tabPoolRosterBtn"].forEach((id) => {
     document.getElementById(id).classList.toggle("active", id === btnId);
   });
 }
@@ -916,6 +944,11 @@ document.getElementById("tabOverviewBtn").addEventListener("click", () => {
 
 document.getElementById("tabRosterBtn").addEventListener("click", () => {
   showTab("rosterTab", "tabRosterBtn");
+});
+
+document.getElementById("tabPoolRosterBtn").addEventListener("click", () => {
+  showTab("poolRosterTab", "tabPoolRosterBtn");
+  if (!poolRosterPoolsLoaded) loadPoolRosterPools();
 });
 
 document.getElementById("tabWeeklyBtn").addEventListener("click", () => {
@@ -1600,6 +1633,127 @@ async function loadNotifData() {
     errorEl.classList.remove("hidden");
   }
 }
+
+// ---------- POOL ROSTER ----------
+let poolRosterPoolsLoaded = false;
+let poolRosterCode = null;
+let poolRosterAllRows = [];
+let poolRosterCurrentPoolId = null;
+
+async function loadPoolRosterPools() {
+  try {
+    const pools = await fetchView("dash_available_pools");
+    poolRosterPoolsLoaded = true;
+    const select = document.getElementById("poolRosterSelect");
+    select.innerHTML = "";
+    pools.forEach((p) => {
+      const opt = document.createElement("option");
+      opt.value = p.pool_id;
+      opt.textContent = p.name;
+      select.appendChild(opt);
+    });
+    if (pools.length) poolRosterCurrentPoolId = pools[0].pool_id;
+  } catch (e) {
+    // silently fail here — the gate hasn't been unlocked yet, and the
+    // dropdown will just be empty until pools load successfully
+  }
+}
+
+async function callPoolRoster(code, poolId) {
+  const res = await fetch(SUPABASE_URL + "/rest/v1/rpc/get_pool_roster", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ access_code: code, p_pool_id: poolId }),
+  });
+  if (!res.ok) throw new Error("bad code");
+  return res.json();
+}
+
+function renderPoolRosterRows(rows) {
+  const body = document.getElementById("poolRosterBody");
+  body.innerHTML = "";
+  if (!rows.length) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 3;
+    td.className = "empty-note";
+    td.textContent = "No matching users.";
+    tr.appendChild(td);
+    body.appendChild(tr);
+    return;
+  }
+  rows.forEach((u) => {
+    const name = (u.first_name || u.last_name) ? ((u.first_name || "") + " " + (u.last_name || "")).trim() : (u.nickname || "—");
+    const tr = document.createElement("tr");
+    tr.innerHTML =
+      "<td>" + name + "</td>" +
+      "<td>" + (u.nickname || "—") + "</td>" +
+      "<td>" + u.email + "</td>";
+    body.appendChild(tr);
+  });
+}
+
+function filterPoolRosterRows(query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return poolRosterAllRows;
+  return poolRosterAllRows.filter((u) => {
+    const name = ((u.first_name || "") + " " + (u.last_name || "")).toLowerCase();
+    const nickname = (u.nickname || "").toLowerCase();
+    const email = (u.email || "").toLowerCase();
+    return name.includes(q) || nickname.includes(q) || email.includes(q);
+  });
+}
+
+async function loadPoolRosterData() {
+  if (!poolRosterCode || !poolRosterCurrentPoolId) return;
+  const errEl = document.getElementById("poolRosterError");
+  try {
+    const rows = await callPoolRoster(poolRosterCode, poolRosterCurrentPoolId);
+    poolRosterAllRows = rows;
+    document.getElementById("poolRosterCount").textContent = rows.length + " users who completed this pool";
+    document.getElementById("poolRosterSearchInput").value = "";
+    renderPoolRosterRows(rows);
+  } catch (e) {
+    errEl.textContent = "Couldn't load this pool's roster. Try again.";
+    errEl.classList.remove("hidden");
+  }
+}
+
+document.getElementById("poolRosterSelect").addEventListener("change", (e) => {
+  poolRosterCurrentPoolId = e.target.value;
+  loadPoolRosterData();
+});
+
+document.getElementById("poolRosterSearchInput").addEventListener("input", (e) => {
+  const filtered = filterPoolRosterRows(e.target.value);
+  renderPoolRosterRows(filtered);
+  document.getElementById("poolRosterCount").textContent = filtered.length + " of " + poolRosterAllRows.length + " users";
+});
+
+document.getElementById("poolRosterUnlockBtn").addEventListener("click", async () => {
+  const code = document.getElementById("poolRosterCodeInput").value;
+  const errEl = document.getElementById("poolRosterError");
+  errEl.classList.add("hidden");
+  if (!code) return;
+  try {
+    if (!poolRosterCurrentPoolId) await loadPoolRosterPools();
+    const rows = await callPoolRoster(code, poolRosterCurrentPoolId);
+    poolRosterCode = code;
+    poolRosterAllRows = rows;
+    document.getElementById("poolRosterGate").classList.add("hidden");
+    document.getElementById("poolRosterPanel").classList.remove("hidden");
+    document.getElementById("poolRosterSelect").value = poolRosterCurrentPoolId;
+    document.getElementById("poolRosterCount").textContent = rows.length + " users who completed this pool";
+    renderPoolRosterRows(rows);
+  } catch (e) {
+    errEl.textContent = "Wrong code, or the request failed. Try again.";
+    errEl.classList.remove("hidden");
+  }
+});
+
+document.getElementById("poolRosterCodeInput").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") document.getElementById("poolRosterUnlockBtn").click();
+});
 
 loadAll();
 </script>
