@@ -189,6 +189,20 @@
   }
   table.roster td { padding: 9px 10px; border-bottom: 1px solid var(--line); }
   .roster-wrap { overflow-x: auto; max-height: 480px; overflow-y: auto; }
+  .search-input {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-size: 13px;
+    background: var(--chalk);
+    margin-bottom: 12px;
+    box-sizing: border-box;
+  }
+  .search-input:focus-visible {
+    outline: 2px solid var(--turf-green);
+    outline-offset: 1px;
+  }
   .badge { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 100px; background: rgba(201,162,75,0.14); color: var(--gold); }
 
   .week-select-row {
@@ -713,6 +727,7 @@
     <div id="rosterPanel" class="panel hidden">
       <div class="panel-title">User roster</div>
       <div class="panel-sub" id="rosterCount"></div>
+      <input type="text" id="rosterSearchInput" class="search-input" placeholder="Search by name, nickname, or email..." />
       <div class="roster-wrap">
         <table class="roster">
           <thead>
@@ -1101,6 +1116,52 @@ async function loadWeekData(weekId) {
   }
 }
 
+let rosterAllRows = [];
+
+function renderRosterRows(rows) {
+  const body = document.getElementById("rosterBody");
+  body.innerHTML = "";
+  if (!rows.length) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 6;
+    td.className = "empty-note";
+    td.textContent = "No matching users.";
+    tr.appendChild(td);
+    body.appendChild(tr);
+    return;
+  }
+  rows.forEach((u) => {
+    const name = (u.first_name || u.last_name) ? ((u.first_name || "") + " " + (u.last_name || "")).trim() : (u.nickname || "—");
+    const tr = document.createElement("tr");
+    tr.innerHTML =
+      "<td>" + name + "</td>" +
+      "<td>" + (u.nickname || "—") + "</td>" +
+      "<td>" + u.email + "</td>" +
+      "<td>" + u.current_level + "</td>" +
+      "<td>" + fmtDate(u.created_at) + "</td>" +
+      "<td>" + (u.referred_by_raw && u.referred_by_raw.trim() ? u.referred_by_raw : "—") + "</td>";
+    body.appendChild(tr);
+  });
+}
+
+function filterRosterRows(query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return rosterAllRows;
+  return rosterAllRows.filter((u) => {
+    const name = ((u.first_name || "") + " " + (u.last_name || "")).toLowerCase();
+    const nickname = (u.nickname || "").toLowerCase();
+    const email = (u.email || "").toLowerCase();
+    return name.includes(q) || nickname.includes(q) || email.includes(q);
+  });
+}
+
+document.getElementById("rosterSearchInput").addEventListener("input", (e) => {
+  const filtered = filterRosterRows(e.target.value);
+  renderRosterRows(filtered);
+  document.getElementById("rosterCount").textContent = filtered.length + " of " + rosterAllRows.length + " users";
+});
+
 document.getElementById("rosterUnlockBtn").addEventListener("click", async () => {
   const code = document.getElementById("rosterCodeInput").value;
   const errEl = document.getElementById("rosterError");
@@ -1108,23 +1169,11 @@ document.getElementById("rosterUnlockBtn").addEventListener("click", async () =>
   if (!code) return;
   try {
     const rows = await callRoster(code);
+    rosterAllRows = rows;
     document.getElementById("rosterGate").classList.add("hidden");
     document.getElementById("rosterPanel").classList.remove("hidden");
     document.getElementById("rosterCount").textContent = rows.length + " users, most recent first";
-    const body = document.getElementById("rosterBody");
-    body.innerHTML = "";
-    rows.forEach((u) => {
-      const name = (u.first_name || u.last_name) ? ((u.first_name || "") + " " + (u.last_name || "")).trim() : (u.nickname || "—");
-      const tr = document.createElement("tr");
-      tr.innerHTML =
-        "<td>" + name + "</td>" +
-        "<td>" + (u.nickname || "—") + "</td>" +
-        "<td>" + u.email + "</td>" +
-        "<td>" + u.current_level + "</td>" +
-        "<td>" + fmtDate(u.created_at) + "</td>" +
-        "<td>" + (u.referred_by_raw && u.referred_by_raw.trim() ? u.referred_by_raw : "—") + "</td>";
-      body.appendChild(tr);
-    });
+    renderRosterRows(rows);
   } catch (e) {
     errEl.textContent = "Wrong code, or the request failed. Try again.";
     errEl.classList.remove("hidden");
